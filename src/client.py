@@ -4,7 +4,7 @@ import socket
 import pickle
 import struct
 from config import host_ip, port
-
+port = int(port)
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.connect((host_ip, port))
 
