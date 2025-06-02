@@ -2,6 +2,8 @@ import socket
 import cv2
 import pickle
 import struct
+
+import numpy as np
 from config import port
 port = int(port)
 
@@ -15,6 +17,8 @@ def run_server():
     server_socket.listen(5)
     print("сервер запущен!")
     client_socket, addr = server_socket.accept()
+    client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)  
     
     data = b""
     payload_size = struct.calcsize("Q")
@@ -22,20 +26,22 @@ def run_server():
     try:
         while True:
             while len(data) < payload_size:
-                data += client_socket.recv(4096)
+                data += client_socket.recv(49152)
             
             packed_msg_size = data[:payload_size]
             data = data[payload_size:]
             msg_size = struct.unpack("Q", packed_msg_size)[0]
 
             while len(data) < msg_size:
-                data += client_socket.recv(4096)
+                data += client_socket.recv(49152)
             
             frame_data = data[:msg_size]
             data = data[msg_size:]
+
+            client_socket.sendall(b"ACK")
             
             try:
-                frame = pickle.loads(frame_data)
+                frame = cv2.imdecode(np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR)
                 if len(frame.shape) == 2:  
                     frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
                 
