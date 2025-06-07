@@ -31,10 +31,10 @@ def run_client():
             frame = cv.resize(frame, (1280, 720))
             gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             edges = cv.Canny(gray, 100, 200)
-            contours, _ = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-
+            contours, _ = cv.findContours(edges, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
             contour_img = np.zeros((gray.shape[0], gray.shape[1], 3), dtype=np.uint8)
             cv.drawContours(contour_img, contours, -1, (255, 255, 255), 1)
+
 
             encode_param = [int(cv.IMWRITE_JPEG_QUALITY), 30]  
             _, jpeg_frame = cv.imencode('.jpg', contour_img, encode_param)
@@ -64,7 +64,8 @@ def run_client():
             
             if cv.waitKey(1) == ord("q"):
                 break
-
+    except KeyboardInterrupt:
+        client_socket.close()
     finally:
         cap.release()
         cv.destroyAllWindows()
