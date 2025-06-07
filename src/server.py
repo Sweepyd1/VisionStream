@@ -1,4 +1,5 @@
 import socket
+import time
 import cv2
 import pickle
 import struct
@@ -49,13 +50,16 @@ def run_server():
             client_socket.sendall(b"ACK")
 
             try:
+                decode_start = time.time()
                 frame = cv2.imdecode(
                     np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR
                 )
-                if len(frame.shape) == 2:
-                    frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+                decode_delay = time.time() - decode_start
+                # if len(frame.shape) == 2:
+                frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
 
                 cv2.imshow("Server Display", frame)
+                print(f"Декодирование: {decode_delay:.4f} сек")
             except Exception as e:
                 print(f"Ошибка декодирования: {e}")
 

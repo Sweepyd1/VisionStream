@@ -22,13 +22,12 @@ def run_client():
     cap.set(cv.CAP_PROP_FRAME_HEIGHT, 720)
     try:
         while True:
-            start_time = time.time()
+            proc_start = time.time()
 
             ret, frame = cap.read()
             if not ret:
                 break
             
-            frame = cv.resize(frame, (1280, 720))
             gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             edges = cv.Canny(gray, 100, 200)
             contours, _ = cv.findContours(edges, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
@@ -40,28 +39,34 @@ def run_client():
             _, jpeg_frame = cv.imencode('.jpg', contour_img, encode_param)
             data = jpeg_frame.tobytes()
 
+            proc_end = time.time()
+
+            processing_delay = proc_end - proc_start
+
             message_size = struct.pack("Q", len(data))
+            send_start = time.time()
             client_socket.sendall(message_size + data)
+            send_delay = time.time() - send_start
             
-            send_time = time.time() - start_time
+            # elapsed = time.time() - start_time
+            # if elapsed < frame_delay:
+            #     time.sleep(frame_delay - elapsed)
 
-            elapsed = time.time() - start_time
-            if elapsed < frame_delay:
-                time.sleep(frame_delay - elapsed)
-
+            ack_start = time.time()
             ack = client_socket.recv(1024)
-
-            rtt = time.time() - start_time
-            
+            rtt = time.time() - ack_start
+                    
             data_size_bits = len(data) * 8  
-            bitrate_mbps = (data_size_bits / send_time) / 1_000_000  
+            bitrate_mbps = (data_size_bits / send_delay) / 1_000_000  
 
-            print(f"Битрейт: {bitrate_mbps/1000:.2f} Мбит/с | Задержка (RTT): {rtt:.4f} сек")
-            
-
+            print(f"Битрейт: {bitrate_mbps:.2f} Мбит/с | "
+                f"Обработка: {processing_delay:.4f} сек | "
+                f"Передача: {send_delay:.4f} сек | "
+                f"RTT: {rtt:.4f} сек")
+                    
             cv.imshow("Client Preview", contour_img)
  
-            
+        
             if cv.waitKey(1) == ord("q"):
                 break
     except KeyboardInterrupt:
