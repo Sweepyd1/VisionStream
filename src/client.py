@@ -10,7 +10,6 @@ port = int(port)
 
 def run_client():
     bytes_sent = 0
-    bitrate_last_time = time.time()
     # Увеличиваем FPS для уменьшения задержки
     target_fps = 20
     frame_delay = 1.0 / target_fps
@@ -30,11 +29,7 @@ def run_client():
     cap.set(cv.CAP_PROP_FPS, target_fps)  # Устанавливаем FPS на уровне камеры
 
     # Оптимизация: предварительно выделяем память для часто используемых объектов
-    kernel = np.ones((3, 3), np.uint8)
     contour_img = np.zeros((target_height, target_width), dtype=np.uint8)
-
-    # Отключаем регулятор битрейта для минимизации задержки
-    use_bitrate_regulator = False
 
     try:
         # Измеряем общую задержку
@@ -85,7 +80,7 @@ def run_client():
             # Динамическая регулировка FPS
             if processing_time < frame_delay:
                 # Увеличиваем FPS если успеваем обрабатывать
-                target_fps = min(60, target_fps + 2)
+                target_fps = min(30, target_fps + 2)
             else:
                 # Уменьшаем FPS если не успеваем
                 target_fps = max(15, target_fps - 5)
@@ -185,7 +180,7 @@ def run_client_v2():
             )
 
             # Регулировка качества для достижения целевого размера
-            target_size = 1000  # 0.2 Мбит/с при 25 FPS: (0.2 * 1_000_000) / 8 / 25 = 1000 байт/кадр
+            target_size = 1000  
             step = 0
             while len(jpeg_frame) > target_size and step < 5:
                 quality = max(5, quality - 5)

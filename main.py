@@ -7,7 +7,7 @@ def main():
     if len(sys.argv) > 1:
         mode = sys.argv[1]
         if mode == "client":
-            run_client_v2()
+            run_client()
         elif mode == "server":
             run_server()
         else:
