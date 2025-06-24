@@ -57,6 +57,7 @@ def run_server():
                 frame = cv2.imdecode(
                     np.frombuffer(frame_data, dtype=np.uint8), cv2.IMREAD_COLOR
                 )
+                frame = cv2.resize(frame, (1280, 720))
                 decode_delay = time.time() - decode_start  # Время декодирования
 
                 
