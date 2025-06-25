@@ -2,13 +2,16 @@ import numpy as np
 import cv2 as cv
 import socket
 import struct
-from config import host_ip, port
 import time
+import zlib
 
-port = int(port)
+host_ip = ""
+port = 
 
 
 def run_client():
+    print(host_ip)
+    print(port)
     bytes_sent = 0
     # Увеличиваем FPS для уменьшения задержки
     target_fps = 20
@@ -180,7 +183,7 @@ def run_client_v2():
             )
 
             # Регулировка качества для достижения целевого размера
-            target_size = 1000  
+            target_size = 1000
             step = 0
             while len(jpeg_frame) > target_size and step < 5:
                 quality = max(5, quality - 5)
@@ -231,3 +234,197 @@ def run_client_v2():
         cap.release()
         cv.destroyAllWindows()
         client_socket.close()
+
+
+# Глобальные переменные для статистики
+total_bytes_sent = 0
+frame_count = 0
+start_time_stats = time.perf_counter()
+target_fps = 15  # Начинаем с более низкого FPS
+frame_delay = 1.0 / target_fps
+
+
+def print_stats(total_bytes, frame_count, start_time, processing_time, width, height):
+    elapsed = time.perf_counter() - start_time
+    if elapsed == 0:
+        return
+    fps = frame_count / elapsed
+    bitrate_mbps = (total_bytes * 8) / (elapsed * 1_000_000)
+    latency_ms = processing_time * 1000
+
+    print(
+        f"FPS: {fps:.2f} | "
+        f"Битрейт: {bitrate_mbps:.4f} Мбит/с | "
+        f"Разрешение: {width}x{height} | "
+        f"Задержка: {latency_ms:.1f} мс"
+    )
+
+
+def serialize_contours(contours):
+    """Сериализация контуров с улучшенной детализацией"""
+    scale_factor = 6  # Уменьшаем квантование для большей точности
+    min_points = 2  # Разрешаем контуры из 2 точек (линии)
+
+    data = bytearray()
+    data.extend(struct.pack("H", len(contours)))  # Количество контуров
+
+    for cnt in contours:
+        # Уменьшаем коэффициент упрощения для сохранения деталей
+        epsilon = 0.005 * cv.arcLength(cnt, True)
+        approx = cv.approxPolyDP(cnt, epsilon, True)
+
+        # Квантование координат
+        points = (approx.reshape(-1, 2) / scale_factor).astype(np.int16)
+
+        # Разрешаем контуры с меньшим количеством точек
+        if len(points) < min_points:
+            continue
+
+        data.extend(struct.pack("H", len(points)))  # Количество точек
+
+        # Упаковка координат с группировкой
+        for i in range(0, len(points), 2):  # Группируем по 2 точки
+            if i + 1 < len(points):
+                x1, y1 = points[i]
+                x2, y2 = points[i + 1]
+                data.extend(struct.pack("hhhh", x1, y1, x2, y2))
+            else:
+                # Одиночная точка в конце
+                x, y = points[i]
+                data.extend(struct.pack("hh", x, y))
+
+    # Применяем сжатие zlib с оптимальным уровнем
+    return zlib.compress(bytes(data), level=3)
+
+
+def send_contour_data(socket, data):
+    """Отправка сжатых данных с заголовком"""
+    header = struct.pack("I", len(data))
+    try:
+        socket.sendall(header + data)
+        return True
+    except (BrokenPipeError, ConnectionResetError):
+        print("Соединение разорвано")
+        return False
+
+
+def adaptive_fps_control(processing_time):
+    """Динамическая регулировка FPS с сохранением состояния"""
+    global target_fps, frame_delay
+
+    if processing_time < frame_delay * 0.8:
+        target_fps = min(20, target_fps + 1)  # Медленное увеличение
+    elif processing_time > frame_delay * 1.2:
+        target_fps = max(8, target_fps - 2)  # Уменьшение при перегрузке
+
+    frame_delay = 1.0 / target_fps
+
+
+def run_client_v3():
+    global total_bytes_sent, frame_count, start_time_stats, target_fps, frame_delay
+
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+    try:
+        client_socket.connect((host_ip, port))
+        print("подключено")
+    except ConnectionRefusedError:
+        print("Не удалось подключиться к серверу")
+        return
+
+    target_width, target_height = 1280, 720
+    cap = cv.VideoCapture(0)
+    if not cap.isOpened():
+        print("Ошибка открытия камеры")
+        return
+
+    cap.set(cv.CAP_PROP_FRAME_WIDTH, target_width)
+    cap.set(cv.CAP_PROP_FRAME_HEIGHT, target_height)
+    cap.set(cv.CAP_PROP_FPS, 20)
+
+    # Уменьшаем детализацию для снижения битрейта
+    contour_min_area = 150
+    gaussian_kernel = (3, 3)
+    adaptive_block_size = 25
+
+    while True:
+        start_time = time.perf_counter()
+
+        ret, frame = cap.read()
+        if not ret:
+            print("Ошибка чтения кадра")
+            break
+
+        # 1. Быстрое преобразование в grayscale
+        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+
+        # 2. Размытие для уменьшения детализации
+        blurred = cv.GaussianBlur(gray, gaussian_kernel, 0)
+
+        # 3. Адаптивная бинаризация с большим размером блока
+        binary = cv.adaptiveThreshold(
+            blurred,
+            255,
+            cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv.THRESH_BINARY_INV,
+            adaptive_block_size,
+            5,
+        )
+
+        kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (3, 3))
+        binary = cv.morphologyEx(binary, cv.MORPH_CLOSE, kernel)
+        # 4. Нахождение только крупных контуров
+        contours, _ = cv.findContours(binary, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+
+        # 5. Фильтрация контуров по площади (увеличиваем минимальную площадь)
+        filtered_contours = [
+            cnt for cnt in contours if cv.contourArea(cnt) > contour_min_area
+        ]
+
+        # 6. Сериализация со сжатием
+        contour_data = serialize_contours(filtered_contours)
+
+        # 7. Отправка данных с проверкой соединения
+        if not send_contour_data(client_socket, contour_data):
+            break
+
+        processing_time = time.perf_counter() - start_time
+
+        # Обновление статистики
+        total_bytes_sent += len(contour_data) + 4  # +4 для заголовка
+        frame_count += 1
+
+        # Печать статистики каждые 10 кадров
+        if frame_count % 10 == 0:
+            print_stats(
+                total_bytes_sent,
+                frame_count,
+                start_time_stats,
+                processing_time,
+                target_width,
+                target_height,
+            )
+
+        adaptive_fps_control(processing_time)
+
+        # Управление задержкой для поддержания FPS
+        elapsed = time.perf_counter() - start_time
+        sleep_time = frame_delay - elapsed
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+
+        # Быстрый показ превью (если возможно)
+        try:
+            cv.imshow("Preview", binary)
+            if cv.waitKey(1) == ord("q"):
+                break
+        except:
+            # Игнорируем ошибки отображения
+            pass
+
+    # Закрытие ресурсов
+    cap.release()
+    cv.destroyAllWindows()
+    client_socket.close()
+    print("Клиент остановлен")
