@@ -5,9 +5,9 @@ import zlib
 import struct
 
 import numpy as np
-# from config import port
 
-port = 
+
+port = 9999
 
 
 def run_server():
@@ -61,13 +61,12 @@ def run_server():
             )  # Отправляем клиенту подтверждение получения кадра
 
             try:
-                decode_start = time.time()  # Запоминаем время начала декодирования
-                # Декодируем JPEG-байты в изображение OpenCV
+                decode_start = time.time()
                 frame = cv.imdecode(
                     np.frombuffer(frame_data, dtype=np.uint8), cv.IMREAD_COLOR
                 )
                 frame = cv.resize(frame, (1280, 720))
-                decode_delay = time.time() - decode_start  # Время декодирования
+                decode_delay = time.time() - decode_start
 
                 if frame.shape == 2:
                     frame = cv.cvtColor(frame, cv.COLOR_GRAY2BGR)
@@ -90,7 +89,6 @@ def run_server():
 
 
 def receive_data(socket, size):
-    """Надежное получение данных заданного размера"""
     data = bytearray()
     while len(data) < size:
         packet = socket.recv(min(4096, size - len(data)))
@@ -101,9 +99,7 @@ def receive_data(socket, size):
 
 
 def deserialize_contours(data):
-    """Десериализация контурных данных с учетом изменений в клиенте"""
     try:
-        # Распаковываем данные
         decompressed = zlib.decompress(data)
     except zlib.error:
         print("Ошибка распаковки данных")
@@ -121,33 +117,27 @@ def deserialize_contours(data):
     num_contours = struct.unpack("H", decompressed[offset : offset + 2])[0]
     offset += 2
 
-    scale_factor = 8  # Должно совпадать с клиентом
+    scale_factor = 8
 
     for _ in range(num_contours):
-        # Проверяем доступность данных
         if offset + 2 > data_len:
             break
 
-        # Читаем количество точек
         num_points = struct.unpack("H", decompressed[offset : offset + 2])[0]
         offset += 2
 
-        # Проверяем доступность данных для точек
         if offset + num_points * 4 > data_len:
             break
 
         points = []
         for _ in range(num_points):
-            # Читаем координаты (2 short)
             x, y = struct.unpack("hh", decompressed[offset : offset + 4])
             offset += 4
 
-            # Масштабируем координаты обратно
             x = int(x * scale_factor)
             y = int(y * scale_factor)
             points.append([x, y])
 
-        # Преобразуем в формат OpenCV
         if len(points) > 0:
             contours.append(np.array(points, dtype=np.int32).reshape(-1, 1, 2))
 
@@ -169,7 +159,7 @@ def run_server_v2():
 
     try:
         while True:
-            # 1. Получаем размер данных (4 байта)
+            # Получаем размер данных (4 байта)
             try:
                 header = receive_data(client_socket, 4)
                 data_size = struct.unpack("I", header)[0]
@@ -177,25 +167,21 @@ def run_server_v2():
                 print("Ошибка чтения заголовка")
                 break
 
-            # 2. Получаем данные контуров
+            # Получаем данные контуров
             try:
                 contour_data = receive_data(client_socket, data_size)
             except ConnectionError:
                 print("Ошибка чтения данных контуров")
                 break
 
-            # 3. Десериализация контуров
             contours = deserialize_contours(contour_data)
 
-            # 4. Визуализация
             display_image = np.zeros((720, 1280, 3), dtype=np.uint8)
             if contours:
                 cv.drawContours(display_image, contours, -1, (255, 255, 255), 2)
 
-            # 5. Отображение
             cv.imshow("High-Resolution Contours", display_image)
 
-            # 6. Отправляем подтверждение клиенту
             try:
                 client_socket.sendall(b"ACK")
             except (BrokenPipeError, ConnectionResetError):
