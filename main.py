@@ -1,7 +1,7 @@
 import sys
 from src.client import run_client, run_client_v2
 from src.server import run_server
-file = "./src/2024-09-13T18-49-14-136.mp4"
+file = "./src/video.mp4"
 
 def main():
     if len(sys.argv) > 1:
