@@ -5,7 +5,7 @@ import struct
 import time
 
 
-host_ip = "192.168.2.151"
+host_ip = "192.168.2.124"
 port = 9999
 
 
