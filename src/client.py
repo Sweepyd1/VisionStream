@@ -88,6 +88,7 @@ port = 9999
 #             cv.imshow("Preview", contour_img)
 #             cv.waitKey(1)
 
+
 #     except (KeyboardInterrupt, socket.error):
 #         pass
 #     finally:
@@ -119,7 +120,7 @@ def run_client(video_file):
         while True:
             frame_start = time.time()
             ret, frame = cap.read()
-            
+
             # Выход при окончании видео
             if not ret:
                 break
@@ -176,16 +177,17 @@ def run_client(video_file):
             bytes_sent = 0
 
             # Отображение превью (опционально)
-            cv.imshow("Preview", contour_img)
-            if cv.waitKey(1) & 0xFF == ord('q'):
-                break
+            # cv.imshow("Preview", contour_img)
+            # if cv.waitKey(1) & 0xFF == ord('q'):
+            #     break
 
     except (KeyboardInterrupt, socket.error) as e:
         print(f"Ошибка: {e}")
-    finally:
-        cap.release()
-        cv.destroyAllWindows()
-        client_socket.close()
+    # finally:
+    #     cap.release()
+    #     cv.destroyAllWindows()
+    #     client_socket.close()
+
 
 def run_client_v2():
     total_bytes = 0
