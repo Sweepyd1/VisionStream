@@ -1,7 +1,7 @@
 import sys
-from src.client import run_client, run_client_v2, run_client_v3
-from src.server import run_server, run_server_v2
-
+from src.client import run_client, run_client_v2, run_video_file_client
+from src.server import run_server
+video_path = "./video.mp4"
 
 def main():
     if len(sys.argv) > 1:
@@ -9,16 +9,12 @@ def main():
         versions = sys.argv[2]
         if mode == "client":
             if versions == "1":
-                run_client()
+                run_video_file_client(video_path=video_path)
             if versions == "2":
                 run_client_v2()
-            if versions == "3":
-                run_client_v3()
         elif mode == "server":
             if versions == "1":
                 run_server()
-            if versions == "2":
-                run_server_v2()
         else:
             print("такого режима запуска нет!")
     else:
